@@ -1,20 +1,20 @@
 // service-worker.js
-const CACHE = 'request-helper-v1';
-const ASSETS = [
+const CACHE_NAME = 'sns-pwa-v1';
+const APP_SHELL = [
   './',
   './index.html',
-  './manifest.webmanifest',
-  './db.js',
   './app.js',
-  // アイコン（存在する場合）
+  './db.js',
+  './manifest.webmanifest',
+  // アイコン類（存在する場合のみ）
   './assets/icon-192.png',
   './assets/icon-512.png'
 ];
 
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
-    const cache = await caches.open(CACHE);
-    await cache.addAll(ASSETS);
+    const cache = await caches.open(CACHE_NAME);
+    await cache.addAll(APP_SHELL);
     self.skipWaiting();
   })());
 });
@@ -22,36 +22,31 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.map((k) => (k !== CACHE ? caches.delete(k) : null)));
+    await Promise.all(
+      keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : Promise.resolve()))
+    );
     self.clients.claim();
   })());
 });
 
-// ネット優先 + フォールバックでキャッシュ
 self.addEventListener('fetch', (event) => {
-  const req = event.request;
+  const { request } = event;
 
-  // 同一オリジンのみキャッシュ（外部サイトは素通し）
-  const url = new URL(req.url);
-  if (url.origin !== location.origin) {
-    return; // そのままネットに任せる
-  }
-
-  event.respondWith((async () => {
-    try {
-      const net = await fetch(req);
-      // 成功時はキャッシュを更新（壊れたレスポンスは除外）
-      const cache = await caches.open(CACHE);
-      if (net && net.status === 200 && req.method === 'GET') {
-        cache.put(req, net.clone());
+  // 同一オリジンのみキャッシュ戦略（外部サイトはそのままネットワーク）
+  if (new URL(request.url).origin === self.location.origin) {
+    event.respondWith((async () => {
+      const cache = await caches.open(CACHE_NAME);
+      const cached = await cache.match(request);
+      try {
+        const fresh = await fetch(request);
+        // 成功したらキャッシュ更新（GETのみ）
+        if (request.method === 'GET' && fresh && fresh.status === 200) {
+          cache.put(request, fresh.clone());
+        }
+        return fresh;
+      } catch (e) {
+        return cached || Response.error();
       }
-      return net;
-    } catch (e) {
-      // オフライン時はキャッシュから
-      const cached = await caches.match(req);
-      if (cached) return cached;
-      // 最後の手段：トップを返す
-      return caches.match('./index.html');
-    }
-  })());
+    })());
+  }
 });
