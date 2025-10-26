@@ -1,11 +1,7 @@
 // app.js (ESM)
-
 import { DB } from './db.js';
 
-/**
- * 外部リンクボタンの定義
- * タイトルとURLはここを書き換えるだけで更新できます。
- */
+/** 外部リンクボタン（ここを書き換えるだけでOK） */
 export const LINKS = [
   { title: 'X',      url: 'https://46memorybit.github.io/SNSPWA/X/index.html' },
   { title: '歌ネット', url: 'https://www.uta-net.com/song/382246/' },
@@ -30,8 +26,8 @@ async function copyText(text) {
     }
     await navigator.clipboard.writeText(text);
     showToast('コピーしました');
-  } catch (e) {
-    // 失敗時はフォールバック
+  } catch {
+    // フォールバック
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.style.position = 'fixed';
@@ -44,9 +40,8 @@ async function copyText(text) {
   }
 }
 
-/** スタンドアロンPWAでも外部ブラウザで開く */
+/** PWA(standalone)でも外部ブラウザで開く傾向にさせる */
 function openExternal(url) {
-  // iOSスタンドアロン回避のため _blank を利用（ネイティブアプリ起動を避けやすい）
   window.open(url, '_blank', 'noopener,noreferrer');
 }
 
@@ -71,39 +66,29 @@ function renderSaved(text) {
 }
 
 async function main() {
-  // 初期描画
   renderLinks();
 
-  // 保存済みテキスト読み込み
+  // 起動時に保存済みを反映
   const saved = await DB.getText();
-  renderSaved(saved);
   $('#inputText').value = saved || '';
+  renderSaved(saved);
 
-  // 入力リアルタイム保存（入力毎）
+  // 入力のたびに自動保存 & 表示へ反映
   $('#inputText').addEventListener('input', async (e) => {
-    await DB.setText(e.target.value);
-    renderSaved(e.target.value);
-  });
-
-  // 手動保存ボタン
-  $('#saveBtn').addEventListener('click', async () => {
-    const v = $('#inputText').value;
+    const v = e.target.value;
     await DB.setText(v);
     renderSaved(v);
-    showToast('保存しました');
   });
 
-  // その場コピー
+  // コピー（現在の入力）
   $('#copyNowBtn').addEventListener('click', () => {
     copyText($('#inputText').value);
   });
 
-  // 保存テキストをコピー
+  // コピー（保存表示）
   $('#copySavedBtn').addEventListener('click', () => {
     copyText($('#savedText').textContent);
   });
-
-  // 保存済み表示自体もタップでコピー
   $('#savedText').addEventListener('click', () => {
     copyText($('#savedText').textContent);
   });
