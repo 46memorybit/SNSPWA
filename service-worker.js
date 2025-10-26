@@ -6,7 +6,6 @@ const APP_SHELL = [
   './app.js',
   './db.js',
   './manifest.webmanifest',
-  // アイコン類（存在する場合のみ）
   './assets/icon-192.png',
   './assets/icon-512.png'
 ];
@@ -22,29 +21,25 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(
-      keys.map((k) => (k !== CACHE_NAME ? caches.delete(k) : Promise.resolve()))
-    );
+    await Promise.all(keys.map(k => (k !== CACHE_NAME ? caches.delete(k) : Promise.resolve())));
     self.clients.claim();
   })());
 });
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
-
-  // 同一オリジンのみキャッシュ戦略（外部サイトはそのままネットワーク）
+  // 同一オリジンのみキャッシュ（外部は素通し）
   if (new URL(request.url).origin === self.location.origin) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
       const cached = await cache.match(request);
       try {
         const fresh = await fetch(request);
-        // 成功したらキャッシュ更新（GETのみ）
         if (request.method === 'GET' && fresh && fresh.status === 200) {
           cache.put(request, fresh.clone());
         }
         return fresh;
-      } catch (e) {
+      } catch {
         return cached || Response.error();
       }
     })());
