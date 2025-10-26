@@ -1,97 +1,82 @@
-// app.js (ESM)
-import { DB } from './db.js';
-
-/** 外部リンクボタン（ここを書き換えるだけでOK） */
-export const LINKS = [
-  { title: 'X',      url: 'https://46memorybit.github.io/SNSPWA/X/index.html' },
+/* =========================
+   設定（ここを編集）
+   ========================= */
+const QUICK_LINKS = [
+  { title: 'X',       url: 'https://46memorybit.github.io/SNSPWA/X/index.html' },
   { title: '歌ネット', url: 'https://www.uta-net.com/song/382246/' },
-  { title: 'USEN',   url: 'https://usen.oshireq.com/song/6299592' },
+  { title: 'USEN',    url: 'https://usen.oshireq.com/song/6299592' },
 ];
 
-const $ = (sel) => document.querySelector(sel);
+/* =========================
+   メイン処理
+   ========================= */
+(async () => {
+  const memoEl   = document.getElementById('memo');
+  const copyBtn  = document.getElementById('copyBtn');
+  const toastEl  = document.getElementById('toast');
+  const saveHint = document.getElementById('saveHint');
+  const linksEl  = document.getElementById('links');
 
-function showToast(msg, ms = 1400) {
-  const el = $('#toast');
-  if (!el) return;
-  el.textContent = msg;
-  el.classList.add('show');
-  setTimeout(() => el.classList.remove('show'), ms);
-}
-
-async function copyText(text) {
+  // 既存保存値のロード
+  const SAVED_KEY = 'memo:text';
   try {
-    if (!text) {
-      showToast('コピーするテキストがありません');
-      return;
+    const saved = await db.get(SAVED_KEY);
+    if (typeof saved === 'string') memoEl.value = saved;
+  } catch (e) { console.warn('load failed', e); }
+
+  // 自動保存（入力のたびに保存：小さめのデバウンス）
+  let t;
+  memoEl.addEventListener('input', () => {
+    saveHint.textContent = '保存中…';
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      try {
+        await db.set(SAVED_KEY, memoEl.value);
+        saveHint.textContent = '保存しました（自動）';
+      } catch (e) {
+        saveHint.textContent = '保存に失敗しました';
+        console.error(e);
+      }
+    }, 250);
+  });
+
+  // コピー
+  copyBtn.addEventListener('click', async () => {
+    const text = memoEl.value ?? '';
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // フォールバック
+        memoEl.select();
+        document.execCommand('copy');
+        memoEl.setSelectionRange(memoEl.value.length, memoEl.value.length);
+      }
+      showToast('コピーしました');
+    } catch (e) {
+      showToast('コピーに失敗しました');
+      console.error(e);
     }
-    await navigator.clipboard.writeText(text);
-    showToast('コピーしました');
-  } catch {
-    // フォールバック
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    showToast(ok ? 'コピーしました' : 'コピーに失敗しました');
-  }
-}
+  });
 
-/** PWA(standalone)でも外部ブラウザで開く傾向にさせる */
-function openExternal(url) {
-  window.open(url, '_blank', 'noopener,noreferrer');
-}
-
-function renderLinks() {
-  const grid = $('#linkGrid');
-  grid.innerHTML = '';
-  LINKS.forEach(link => {
-    const a = document.createElement('a');
-    a.className = 'linkBtn';
-    a.href = '#';
-    a.textContent = link.title;
-    a.addEventListener('click', (e) => {
-      e.preventDefault();
-      openExternal(link.url);
+  // リンクボタン描画（app.js の QUICK_LINKS を利用）
+  linksEl.innerHTML = '';
+  QUICK_LINKS.forEach(({ title, url }) => {
+    const btn = document.createElement('button');
+    btn.className = 'btn';
+    btn.textContent = title;
+    btn.addEventListener('click', () => {
+      // PWA（standalone）でも外部はブラウザで開かれる想定
+      // ここでは安全のため rel 付与
+      window.open(url, '_blank', 'noopener,noreferrer');
     });
-    grid.appendChild(a);
-  });
-}
-
-function renderSaved(text) {
-  $('#savedText').textContent = text || '';
-}
-
-async function main() {
-  renderLinks();
-
-  // 起動時に保存済みを反映
-  const saved = await DB.getText();
-  $('#inputText').value = saved || '';
-  renderSaved(saved);
-
-  // 入力のたびに自動保存 & 表示へ反映
-  $('#inputText').addEventListener('input', async (e) => {
-    const v = e.target.value;
-    await DB.setText(v);
-    renderSaved(v);
+    linksEl.appendChild(btn);
   });
 
-  // コピー（現在の入力）
-  $('#copyNowBtn').addEventListener('click', () => {
-    copyText($('#inputText').value);
-  });
-
-  // コピー（保存表示）
-  $('#copySavedBtn').addEventListener('click', () => {
-    copyText($('#savedText').textContent);
-  });
-  $('#savedText').addEventListener('click', () => {
-    copyText($('#savedText').textContent);
-  });
-}
-
-document.addEventListener('DOMContentLoaded', main);
+  function showToast(msg) {
+    toastEl.textContent = msg;
+    toastEl.style.display = 'block';
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => (toastEl.style.display = 'none'), 1500);
+  }
+})();
