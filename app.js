@@ -12,7 +12,7 @@ const toast = (msg) => {
 
 function renderQuickLinks() {
   const defaults = [
-    { title: 'X', url: 'https://x.com/home' },
+    { title: 'X(短縮)', url: 'https://46memorybit.github.io/SNSPWA/X/index.html' },
     { title: '歌ネット', url: 'https://www.uta-net.com/song/382246/' },
     { title: 'USEN', url: 'https://usen.oshireq.com/song/6299592' },
     { title: 'YouTube', url: 'https://www.youtube.com/' },
