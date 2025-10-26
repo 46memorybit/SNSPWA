@@ -1,47 +1,49 @@
-// service-worker.js
-const CACHE_NAME = 'sns-pwa-v1';
+// できるだけシンプルなオフライン対応
+const CACHE_NAME = 'savecopy-pwa-v1';
 const APP_SHELL = [
   './',
   './index.html',
   './app.js',
   './db.js',
   './manifest.webmanifest',
+  // アイコンは任意：存在すればキャッシュに含める
   './assets/icon-192.png',
   './assets/icon-512.png'
 ];
 
-self.addEventListener('install', (event) => {
-  event.waitUntil((async () => {
-    const cache = await caches.open(CACHE_NAME);
-    await cache.addAll(APP_SHELL);
-    self.skipWaiting();
-  })());
+self.addEventListener('install', (e) => {
+  e.waitUntil(
+    caches.open(CACHE_NAME).then((c) => c.addAll(APP_SHELL))
+  );
+  self.skipWaiting();
 });
 
-self.addEventListener('activate', (event) => {
-  event.waitUntil((async () => {
-    const keys = await caches.keys();
-    await Promise.all(keys.map(k => (k !== CACHE_NAME ? caches.delete(k) : Promise.resolve())));
-    self.clients.claim();
-  })());
+self.addEventListener('activate', (e) => {
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.map(k => (k === CACHE_NAME ? null : caches.delete(k))))
+    )
+  );
+  self.clients.claim();
 });
 
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
-  // 同一オリジンのみキャッシュ（外部は素通し）
-  if (new URL(request.url).origin === self.location.origin) {
-    event.respondWith((async () => {
+// 同一オリジンは Stale-While-Revalidate、クロスオリジンはネット優先
+self.addEventListener('fetch', (e) => {
+  const url = new URL(e.request.url);
+  if (url.origin === location.origin) {
+    e.respondWith((async () => {
       const cache = await caches.open(CACHE_NAME);
-      const cached = await cache.match(request);
-      try {
-        const fresh = await fetch(request);
-        if (request.method === 'GET' && fresh && fresh.status === 200) {
-          cache.put(request, fresh.clone());
-        }
-        return fresh;
-      } catch {
-        return cached || Response.error();
-      }
+      const cached = await cache.match(e.request);
+      const fetchPromise = fetch(e.request).then(res => {
+        cache.put(e.request, res.clone());
+        return res;
+      }).catch(() => null);
+      return cached || fetchPromise || new Response('オフラインです', { status: 503 });
     })());
+  } else {
+    e.respondWith(fetch(e.request).catch(async () => {
+      // 外部はキャッシュしていないのでオフライン時は簡易応答
+      return new Response('オフラインのため取得できません', { status: 504 });
+    }));
   }
 });
