@@ -1,63 +1,26 @@
-// db.js
-(() => {
-  const DB_NAME = 'request-helper-db';
-  const DB_VER = 1;
-  const STORE = 'links';
+// db.js (ESM)
+/**
+ * シンプルかつ高速にするため localStorage を使用。
+ * 端末内に半永久的に保持され、オフラインでも利用可能。
+ * 必要になれば IndexedDB 実装に差し替え可能なインターフェースにしています。
+ */
 
-  let _db;
+const KEY = 'savedText';
 
-  function openDB() {
-    return new Promise((resolve, reject) => {
-      if (_db) return resolve(_db);
-      const req = indexedDB.open(DB_NAME, DB_VER);
-      req.onupgradeneeded = (e) => {
-        const db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE)) {
-          const os = db.createObjectStore(STORE, { keyPath: 'id', autoIncrement: true });
-          os.createIndex('createdAt', 'createdAt', { unique: false });
-        }
-      };
-      req.onsuccess = () => { _db = req.result; resolve(_db); };
-      req.onerror = () => reject(req.error);
-    });
+export const DB = {
+  async getText() {
+    try {
+      return localStorage.getItem(KEY) ?? '';
+    } catch (e) {
+      return '';
+    }
+  },
+  async setText(value) {
+    try {
+      localStorage.setItem(KEY, value ?? '');
+      return true;
+    } catch (e) {
+      return false;
+    }
   }
-
-  async function addLink(title, url) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.objectStore(STORE).add({
-        title, url, createdAt: Date.now()
-      });
-    });
-  }
-
-  async function getLinks() {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readonly');
-      const req = tx.objectStore(STORE).index('createdAt').openCursor(null, 'prev');
-      const out = [];
-      req.onsuccess = (e) => {
-        const cur = e.target.result;
-        if (cur) { out.push(cur.value); cur.continue(); }
-      };
-      tx.oncomplete = () => resolve(out);
-      tx.onerror = () => reject(tx.error);
-    });
-  }
-
-  async function deleteLink(id) {
-    const db = await openDB();
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction(STORE, 'readwrite');
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-      tx.objectStore(STORE).delete(id);
-    });
-  }
-
-  window.DB = { addLink, getLinks, deleteLink };
-})();
+};
